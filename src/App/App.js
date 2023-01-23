@@ -1,130 +1,147 @@
-import axios from "axios";
 import React, { useEffect, useRef, useState } from "react"
+import useWebSocket from 'react-use-websocket';
+import useCanvas from "../useCanvas";
+import {analyser,bufferLength,dataArray,ready as AudioReady} from "../useAudio";
 
-
-
-const App = () =>
+export const msgTypes = 
 {
-    const canvasRef = useRef()
-    const inputBufferSize = 2048;
-    const sampleRate = 48000
-    const smoothingTimeConstant = 0.8
-    const minDecibels = -100
+    fft_update: 'dataUpdate',
+    getData: 'getData',
+    txt_response: ' txt_response',
+    fft_response: 'fft_response',
+}
+export const deviceTypes =
+{
+    mobile: 'mobile',
+    web: 'web',
+}
 
-    let canvas
-    let canvasCtx 
-    let dataArray
-    let bufferLength
-    let analyser
-
-    useEffect(()=>
+const App = () => 
+{
+    const { sendMessage, getWebSocket,readyState:WebSocketReady,lastJsonMessage } = useWebSocket('ws://localhost:50007', {
+        onOpen: () => {
+            console.log('opened');
+        },
+        onError: (event) => { console.error(event); },
+        shouldReconnect: (closeEvent) => true,
+        reconnectInterval: 3000
+    });
+    const WebcanvasRef = useRef()
+    const MobileCanvasRef = useRef()
+    const {canvas:MobileCanvas,ready:MobileCanvasReady,canvasCtx:MobileCanvasCtx} = useCanvas(MobileCanvasRef)
+    const {canvas:WebCanvas,ready:WebCanvasReady,canvasCtx:WebCanvasCtx} = useCanvas(WebcanvasRef)
+    
+    useEffect(() => 
     {
-        if(canvasRef.current)
+        //if (WebCanvasReady && MobileCanvasReady && WebSocketReady === 1 && AudioReady) 
+        if (WebCanvasReady && MobileCanvasReady && AudioReady) 
         {
-            canvas = canvasRef.current
-            canvasCtx = canvas.getContext("2d",{willReadFrequently: true})
+            WebCanvas.width = window.innerWidth * 0.8
+            WebCanvas.height = 200
+            MobileCanvas.width = window.innerWidth * 0.8
+            MobileCanvas.height = 200
 
-            navigator.mediaDevices.getUserMedia({ audio: true }).then((stream) => 
-            {
-                const micStream = stream
-                const audioContextOptions = 
-                {
-                    sampleRate:sampleRate //can see up to 4000hz, 31,25 hz each step
-                };
-                const audioCtx = new window.AudioContext(audioContextOptions)
-                
-                analyser = audioCtx.createAnalyser()
-
-                const source = audioCtx.createMediaStreamSource(micStream)
-                source.connect(analyser)
-
-                analyser.fftSize = inputBufferSize
-                analyser.smoothingTimeConstant = smoothingTimeConstant
-                analyser.minDecibels = minDecibels
-                
-                bufferLength = analyser.frequencyBinCount
-                dataArray = new Uint8Array(bufferLength)
-          
-                drawcanvas()
-            })
-            
+            drawcanvas()
         }
-
-      
-    },[canvasRef.current])
-
-
-    function drawcanvas()
-    {
-        //console.log(dataArray)
-        requestAnimationFrame(drawcanvas)
-
-        analyser.getByteFrequencyData(dataArray);
-
-        canvasCtx.lineWidth = 2;
-        canvasCtx.strokeStyle = "rgb(255, 0, 0)";
-        canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
-        canvasCtx.font = '10px serif';
-
-        const barWidth = (canvas.width  / bufferLength) * 2.5
-        const buffInterval = bufferLength/10
-
-        let x = 0;
-        let x2 = 0;
-        let barHeight;
-        let hzS = 0
-        let currInterval = 0
         
-        for (let i = 0; i < bufferLength; i++) 
-        {
-            barHeight = dataArray[i];
+    }, [AudioReady,WebCanvasReady,MobileCanvasReady,WebSocketReady])
 
-            canvasCtx.fillStyle = `rgb(${barHeight + 100}, 50, 50)`;
-            canvasCtx.fillRect(x, canvas.height - barHeight - 20, barWidth, barHeight);
-            
-            if(i >= currInterval || i == 0)
+
+    function drawcanvas() 
+    {
+        requestAnimationFrame(drawcanvas)
+        sendMessage(`{ "msgType": "${msgTypes.getData}", "device": "${deviceTypes.mobile}" }`);
+        let max1 = 0
+        let max2 = 0
+        
+        try
+        {
+            if (lastJsonMessage.msgType == msgTypes.fft_response) 
             {
-                if(i != 0)currInterval+=buffInterval
-                canvasCtx.fillText(parseInt(hzS), x2, canvas.height);
-                //console.log(parseInt(hzS),x2)
-                x2 += 60;
+                const Yv = Float32Array.from(lastJsonMessage.data)
+
+                for(let i = 1; i < Yv.length; i++)
+                {
+                    if(Yv[i] > max1) max1 = Yv[i]
+                }
+                for(let i = 0; i < dataArray.length; i++)
+                {
+                    if(dataArray[i] > max2) max2 = dataArray[i]
+                }
+                //console.log(max1)
+
+                //draw(Yv)
+            }
+            //else console.log(event.data); 
+        }
+        catch
+        {
+            //console.log('error')
+        }
+        
+        function draw(Yrray) 
+        {
+            analyser.getByteTimeDomainData(dataArray);
+            WebCanvasCtx.lineWidth = 2;
+            WebCanvasCtx.strokeStyle = "rgb(255, 0, 0)";
+            WebCanvasCtx.clearRect(0, 0, WebCanvas.width, WebCanvas.height);
+            WebCanvasCtx.font = '10px serif';
+
+            MobileCanvasCtx.lineWidth = 2;
+            MobileCanvasCtx.strokeStyle = "rgb(255, 0, 0)";
+            MobileCanvasCtx.clearRect(0, 0, MobileCanvas.width, MobileCanvas.height);
+            MobileCanvasCtx.font = '10px serif';
+
+            let barWidth = (WebCanvas.width / Yrray.length) 
+
+            let x = 0;
+            let barHeight;
+
+            for (let i = 0; i < Yrray.length; i++) 
+            {
+                barHeight = (((100*Yrray[i])/max1)*(WebCanvas.height))/100;
+                WebCanvasCtx.fillStyle = `rgb(${barHeight + 100}, 50, 50)`;
+                WebCanvasCtx.fillRect(x, WebCanvas.height - barHeight, barWidth, barHeight);
+
+                x += barWidth + 1;
+            }
+            x = 0;
+            barWidth = (WebCanvas.width / bufferLength) 
+
+            for (let i = 0; i < bufferLength; i++) 
+            {
+                barHeight = dataArray[i];
+                MobileCanvasCtx.fillStyle = `rgb(${barHeight + 100}, 50, 50)`;
+                MobileCanvasCtx.fillRect(x, MobileCanvas.height - barHeight, barWidth, barHeight);
+
+                x += barWidth + 1;
             }
 
-            x += barWidth + 1;
-            hzS+=(sampleRate/(inputBufferSize/2))
+
         }
+
+        draw([0])
     }
-    
+
 
     return (
-        <div style={{display:'flex',alignItems:'center',justifyContent:'center',height:'100vh'}}>
-            <canvas
-            width={800}
-            height={300}
-            style={{border:'solid 2px black'}}
-            ref = {canvasRef}
-            />
-            <button onClick={()=>
-                {
-                    /*
-                         let arr = []
-                        for (let i = 0; i < dataArray.length; i++)
-                        {
-                            arr.push(dataArray[i])
-                        }
-                        console.log(arr.length)
-
-                    */
-                    const api = axios.create({baseURL:'http://192.168.0.10:5000'})
-                    api.defaults.headers.get['Access-Control-Allow-Origin'] = '*';
-                    api.get('/').then((res)=>
-                    {
-                        console.log(res.data)
-                    })
-
-                }}>adasddas</button>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh',flexDirection:'column' }}>
+            <div>
+                <p style={{fontWeight:'bolder',fontSize:'40px',margin:0}}>Mobile FFT</p>
+                <canvas
+                    style={{ border: 'solid 2px black' }}
+                    ref={WebcanvasRef}
+                />
+            </div>
+            <div>
+                <p style={{fontWeight:'bolder',fontSize:'40px',margin:0}}>Web FFT</p>
+                <canvas
+                    style={{ border: 'solid 2px black' }}
+                    ref={MobileCanvasRef}
+                />
+            </div>
         </div>
-        
+
     )
 }
 

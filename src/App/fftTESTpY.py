@@ -2,10 +2,10 @@ import asyncio
 import websockets
 import numpy as np
 from matplotlib import pyplot as plt
-from scipy.fft import rfft, rfftfreq
+from scipy.fft import rfft, rfftfreq,fft,fftfreq
+import time
 
-SAMPLE_RATE = 44100  # Hertz
-DURATION = 5  # Seconds
+SAMPLE_RATE = 32000 
 
 def ProcessFFT(PreFFTdata):
     normalized_tone = np.int16((PreFFTdata / PreFFTdata.max()) * 32767)
@@ -16,38 +16,44 @@ def ProcessFFT(PreFFTdata):
     yf = rfft(normalized_tone)
     xf = rfftfreq(N, 1 / SAMPLE_RATE)
 
-    Yvalues = '{\n"Yvalues":['
+    Values = '{\n"Yvalues":['
 
     for i in range(len(yf)):
-        Yvalues +=(str(int(np.abs(yf[i].imag))))
+        Values +=(str(int(np.abs(yf[i].imag))))
         if(i<len(yf)-1):
-            Yvalues+=','
-        Yvalues+='\n'
-    Yvalues+=']}'
-
-    Xvalues = '{\n"Xvalues":['
+            Values+=','
+        Values+='\n'
+    Values+='],\n"Xvalues":['
 
     for i in range(len(xf)):
-        Xvalues +=(str(int(xf[i])))
+        Values +=(str(int(xf[i])))
         if(i<len(xf)-1):
-            Xvalues+=','
-        Xvalues+='\n'
-    Xvalues+=']}'
+            Values+=','
+        Values+='\n'
+    Values+=']}'
     #print(Xvalues)
-    return Yvalues,Xvalues
+    return Values
 
 # create handler for each connection
  
 async def handler(websocket, path):
-    data = await websocket.recv()
-    number = [int(i, 20) for i in data.split(',')]
-    #print(f"Recieved: {number}")
+    while True:
+        data = await websocket.recv()
+        
+        if data == 'Done':
+            break
+        start_time = time.time()
     
-    PreFFTdata = np.array(number)
-    Yvalues,Xvalues =  ProcessFFT(PreFFTdata)
-    
-    await websocket.send(Xvalues)
-    await websocket.send(Yvalues)
+        number = [float(i) for i in data.split(',')]
+        #print(f"Recieved: {number}")
+        
+        PreFFTdata = np.array(number)
+        values =  ProcessFFT(PreFFTdata)
+        
+        #print("--- %s seconds ---" % (time.time() - start_time))
+        
+        await websocket.send(values)
+        await websocket.send('Done')
  
 start_server = websockets.serve(handler, "localhost", 50007)
 
