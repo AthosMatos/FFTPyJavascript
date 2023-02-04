@@ -12,7 +12,7 @@ const App = () =>
     const MobileCanvasRef = useRef()
     const {canvas:MobileCanvas,ready:MobileCanvasReady,canvasCtx:MobileCanvasCtx} = useCanvas(MobileCanvasRef)
     const {canvas:WebCanvas,ready:WebCanvasReady,canvasCtx:WebCanvasCtx} = useCanvas(WebcanvasRef)
-    
+      
     useEffect(() => 
     {
         function prepareCanvas()
@@ -27,7 +27,8 @@ const App = () =>
             MobileCanvasCtx.strokeStyle = "rgb(255, 0, 0)";
         }
 
-        if (WebCanvasReady && MobileCanvasReady && WebSocketReady && AudioReady)
+        //if (WebCanvasReady && MobileCanvasReady && WebSocketReady && AudioReady)
+        if (WebCanvasReady && MobileCanvasReady && AudioReady)
         {
             prepareCanvas()
             drawOsciloscopes()
@@ -37,66 +38,77 @@ const App = () =>
     function drawOsciloscopes()
     {
         requestAnimationFrame(drawOsciloscopes)
-        getMobileAudioData()
-        
-        onMobileAudioDataMessage((lastJsonMessage)=>
+        //getMobileAudioData()
+
+        function DrawMobileOsciloscope(dArray)
         {
-            analyser.getByteTimeDomainData(dataArray);
+            MobileCanvasCtx.clearRect(0, 0, MobileCanvas.width, MobileCanvas.height);
+            MobileCanvasCtx.beginPath();
+
+            const barWidth = (MobileCanvas.width / dArray.length) 
+            for (let i = 0,x = 0; i < dArray.length; i++) 
+            {
+                const v = dArray[i] / 128.0;
+                const y = (v * MobileCanvas.height) / 2;
             
-            function DrawMobileOsciloscope(dArray)
-            {
-                MobileCanvasCtx.clearRect(0, 0, MobileCanvas.width, MobileCanvas.height);
-                MobileCanvasCtx.beginPath();
-
-                const barWidth = (MobileCanvas.width / dArray.length) 
-                for (let i = 0,x = 0; i < dArray.length; i++) 
+                if (i === 0) 
                 {
-                    const v = dArray[i] / 128.0;
-                    const y = (v * MobileCanvas.height) / 2;
-                
-                    if (i === 0) 
-                    {
-                        MobileCanvasCtx.moveTo(x, y);
-                    } 
-                    else 
-                    {
-                        MobileCanvasCtx.lineTo(x, y);
-                    }
-                    x += barWidth;
-                }
-                MobileCanvasCtx.lineTo(MobileCanvas.width, MobileCanvas.height / 2);
-                MobileCanvasCtx.stroke();
-            }
-            function DrawWebOsciloscope()
-            {
-                WebCanvasCtx.clearRect(0, 0, WebCanvas.width, WebCanvas.height);
-                WebCanvasCtx.beginPath();
-
-                const barWidth = (WebCanvas.width / bufferLength) 
-                for (let i = 0,x = 0; i < bufferLength; i++) 
+                    MobileCanvasCtx.moveTo(x, y);
+                } 
+                else 
                 {
-                    const v = dataArray[i] / 128.0;
-                    const y = (v * WebCanvas.height) / 2;
-                
-                    if (i === 0) 
-                    {
-                        WebCanvasCtx.moveTo(x, y);
-                    } 
-                    else 
-                    {
-                        WebCanvasCtx.lineTo(x, y);
-                    }
-                
-                    x += barWidth;
+                    MobileCanvasCtx.lineTo(x, y);
                 }
-                WebCanvasCtx.lineTo(WebCanvas.width, WebCanvas.height / 2);
-                WebCanvasCtx.stroke();
+                x += barWidth;
             }
+            MobileCanvasCtx.lineTo(MobileCanvas.width, MobileCanvas.height / 2);
+            MobileCanvasCtx.stroke();
+        }
+        function DrawWebOsciloscope()
+        {
+            WebCanvasCtx.clearRect(0, 0, WebCanvas.width, WebCanvas.height);
+            WebCanvasCtx.beginPath();
 
-            DrawMobileOsciloscope(lastJsonMessage)
-            DrawWebOsciloscope()
-        })
+            const barWidth = (WebCanvas.width / bufferLength) 
+            for (let i = 0,x = 0; i < bufferLength; i++) 
+            {
+                const v = dataArray[i] / 128.0;
+                const y = (v * WebCanvas.height) / 2;
+            
+                if (i === 0) 
+                {
+                    WebCanvasCtx.moveTo(x, y);
+                } 
+                else 
+                {
+                    WebCanvasCtx.lineTo(x, y);
+                }
+            
+                x += barWidth;
+            }
+            WebCanvasCtx.lineTo(WebCanvas.width, WebCanvas.height / 2);
+            WebCanvasCtx.stroke();
+        }
+        analyser.getByteTimeDomainData(dataArray);
+
+        //onMobileAudioDataMessage((lastJsonMessage)=>DrawMobileOsciloscope(lastJsonMessage))
+       
+        DrawWebOsciloscope()
+    }
+
+    function saveAudioDataforAnalysys()
+    {
+        var a = document.createElement("a");
+        let divided = []
+        for (let i = 0; i < dataArray.length; i++)
+        {
+            divided.push(((dataArray[i]/128) - 1)* 100) 
+        }
         
+
+        a.href = window.URL.createObjectURL(new Blob([`${divided}`], {type: "text/plain"}));
+        a.download = "demo.txt";
+        a.click();
     }
 
     return (
@@ -108,12 +120,13 @@ const App = () =>
                     ref={MobileCanvasRef}
                 />
             </div>
-            <div>
+            <div style={{display:'flex',flexDirection:'column'}}>
                 <p style={{fontWeight:'bolder',fontSize:'40px',margin:0}}>Web Audio</p>
                 <canvas
                     style={{ border: 'solid 2px black' }}
                     ref={WebcanvasRef}
                 />
+                <button style={{width:'20vw'}} onClick={saveAudioDataforAnalysys}>Get Mobile Audio Data</button>
             </div>
         </div>
 
