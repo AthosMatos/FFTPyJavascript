@@ -37,6 +37,7 @@ def show_data(sig,i):
     axis[i,1].get_yaxis().set_visible(False)
     
     mfccs = mfcc(y, SAMPLE_RATE, numcep=13, nfilt=26, nfft=1103).T
+    print(mfccs.shape)
     axis[i,2].imshow(mfccs, cmap='hot', origin='lower', aspect='auto')
     axis[i,2].set_title('mfcc')
     axis[i,2].get_xaxis().set_visible(False)
