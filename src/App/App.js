@@ -102,7 +102,7 @@ const App = () =>
         let divided = []
         for (let i = 0; i < dataArray.length; i++)
         {
-            divided.push(((dataArray[i]/128) - 1)* 100) 
+            divided.push((dataArray[i]/128) - 1)
         }
         
 
